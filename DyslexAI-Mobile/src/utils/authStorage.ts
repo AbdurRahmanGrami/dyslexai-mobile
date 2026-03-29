@@ -19,7 +19,12 @@ export async function getUser(): Promise<UserInfo | null> {
   const raw = await AsyncStorage.getItem(USER_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as UserInfo;
+    const parsed = JSON.parse(raw) as Partial<UserInfo>;
+    // Backward-compat: older stored users may not have `role`.
+    if (!parsed.role) {
+      return { ...(parsed as UserInfo), role: 'student' };
+    }
+    return parsed as UserInfo;
   } catch {
     return null;
   }

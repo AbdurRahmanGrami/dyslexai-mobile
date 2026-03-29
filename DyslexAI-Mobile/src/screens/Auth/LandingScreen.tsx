@@ -58,6 +58,15 @@ export default function LandingScreen() {
             <Text style={styles.primaryButtonText}>Get Started</Text>
             <MaterialIcons name="arrow-forward" size={22} color={colors.text} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('Signup', { defaultRole: 'teacher' })}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.secondaryButtonText}>I am a Teacher</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('Login')}

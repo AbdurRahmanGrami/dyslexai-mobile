@@ -17,6 +17,15 @@ import LearningExercisesScreen from './src/screens/exercises/LearningExercisesSc
 import PracticeScreen from './src/screens/exercises/PracticeScreen';
 import UploadScreen from './src/screens/upload/UploadScreen';
 import LibraryScreen from './src/screens/Library/LibraryScreen';
+import TeacherDashboardScreen from './src/screens/teacher/TeacherDashboardScreen';
+import TeacherWorkspaceScreen from './src/screens/teacher/TeacherWorkspaceScreen';
+import TeacherAssignmentsScreen from './src/screens/teacher/TeacherAssignmentsScreen';
+import CreateTeacherAssignmentScreen from './src/screens/teacher/CreateTeacherAssignmentScreen';
+import TeacherStudentProgressScreen from './src/screens/teacher/TeacherStudentProgressScreen';
+import GameHomeScreen from './src/screens/game/GameHomeScreen';
+import GameSessionScreen from './src/screens/game/GameSessionScreen';
+import GameCompleteScreen from './src/screens/game/GameCompleteScreen';
+import GamePuzzleScreen from './src/screens/game/GamePuzzleScreen';
 import SettingsScreen from './src/screens/app/SettingsScreen';
 import AboutScreen from './src/screens/app/AboutScreen';
 import HelpScreen from './src/screens/app/HelpScreen';
@@ -51,7 +60,9 @@ function AppNavigator() {
   }
   return (
     <Stack.Navigator
-      initialRouteName={user ? 'Dashboard' : 'Landing'}
+            initialRouteName={
+              user ? (user.role === 'teacher' ? 'TeacherDashboard' : 'Dashboard') : 'Landing'
+            }
           screenOptions={{
             headerStyle: { backgroundColor: colors.surface },
             headerTintColor: colors.text,
@@ -80,6 +91,11 @@ function AppNavigator() {
             options={{ title: 'DyslexAI' }}
           />
           <Stack.Screen
+            name="TeacherDashboard"
+            component={TeacherDashboardScreen}
+            options={{ title: 'Teacher' }}
+          />
+          <Stack.Screen
             name="Upload"
             component={UploadScreen}
             options={{ title: 'Scan Text' }}
@@ -98,6 +114,46 @@ function AppNavigator() {
             name="Practice"
             component={PracticeScreen}
             options={{ title: 'Practice' }}
+          />
+          <Stack.Screen
+            name="TeacherWorkspace"
+            component={TeacherWorkspaceScreen}
+            options={{ title: 'Workspace' }}
+          />
+          <Stack.Screen
+            name="TeacherAssignments"
+            component={TeacherAssignmentsScreen}
+            options={{ title: 'Assignments' }}
+          />
+          <Stack.Screen
+            name="CreateTeacherAssignment"
+            component={CreateTeacherAssignmentScreen}
+            options={{ title: 'Create Assignment' }}
+          />
+          <Stack.Screen
+            name="TeacherStudentProgress"
+            component={TeacherStudentProgressScreen}
+            options={{ title: 'Student Progress' }}
+          />
+          <Stack.Screen
+            name="GameHome"
+            component={GameHomeScreen}
+            options={{ title: 'Game Mode' }}
+          />
+          <Stack.Screen
+            name="GameSession"
+            component={GameSessionScreen}
+            options={{ title: 'Game Session' }}
+          />
+          <Stack.Screen
+            name="GameComplete"
+            component={GameCompleteScreen}
+            options={{ title: 'Complete Day' }}
+          />
+          <Stack.Screen
+            name="GamePuzzle"
+            component={GamePuzzleScreen}
+            options={{ title: 'Puzzle' }}
           />
           <Stack.Screen
             name="Library"

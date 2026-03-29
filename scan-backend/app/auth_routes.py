@@ -3,7 +3,7 @@ Auth routes: signup (hashed password), login (JWT).
 """
 import os
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 import bcrypt
 from jose import JWTError, jwt
 from app.auth_db import User, get_auth_db, init_auth_db, SessionLocal
+from typing import Literal
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 security = HTTPBearer(auto_error=False)
@@ -24,6 +25,7 @@ class SignupRequest(BaseModel):
     name: str
     email: str  # validated as email in route
     password: str
+    role: Literal["student", "teacher"] = "student"
 
 
 class LoginRequest(BaseModel):
@@ -51,9 +53,9 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(_password_bytes(plain), hashed.encode("ascii"))
 
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user_id: int, email: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    payload = {"sub": str(user_id), "email": email, "exp": expire}
+    payload = {"sub": str(user_id), "email": email, "role": role, "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -81,14 +83,15 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
             email=email,
             password_hash=hash_password(data.password),
             name=name,
+            role=data.role,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-        token = create_access_token(user.id, user.email)
+        token = create_access_token(user.id, user.email, user.role)
         return AuthResponse(
             access_token=token,
-            user={"id": user.id, "email": user.email, "name": user.name},
+            user={"id": user.id, "email": user.email, "name": user.name, "role": user.role},
         )
     except HTTPException:
         raise
@@ -105,10 +108,10 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email.strip().lower()).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user.id, user.email)
+    token = create_access_token(user.id, user.email, user.role)
     return AuthResponse(
         access_token=token,
-        user={"id": user.id, "email": user.email, "name": user.name},
+        user={"id": user.id, "email": user.email, "name": user.name, "role": user.role},
     )
 
 
@@ -131,4 +134,27 @@ def me(user_id: int | None = Depends(get_current_user_id), db: Session = Depends
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    return {"id": user.id, "email": user.email, "name": user.name}
+    return {"id": user.id, "email": user.email, "name": user.name, "role": user.role}
+
+
+@router.get("/user-by-email")
+def user_by_email(email: str = Query(..., description="User email"), db: Session = Depends(get_db)):
+    """
+    Lightweight lookup used by teacher assignment flow to add a student by email.
+    Returns whether a user exists in auth DB and basic profile info.
+    """
+    e = (email or "").strip().lower()
+    if not e:
+        raise HTTPException(status_code=400, detail="Email is required")
+    user = db.query(User).filter(User.email == e).first()
+    if not user:
+        return {"found": False}
+    return {
+        "found": True,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+        },
+    }

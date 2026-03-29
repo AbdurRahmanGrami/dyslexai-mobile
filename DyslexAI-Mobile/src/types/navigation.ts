@@ -19,9 +19,18 @@ export type ScanResultPayload = {
 
 export type RootStackParamList = {
   Landing: undefined;
-  Signup: undefined;
+  Signup: { defaultRole?: 'student' | 'teacher' } | undefined;
   Login: undefined;
   Dashboard: undefined;
+  TeacherDashboard: undefined;
+  TeacherWorkspace: undefined;
+  TeacherAssignments: undefined;
+  CreateTeacherAssignment: { seedWords?: string[] } | undefined;
+  TeacherStudentProgress: undefined;
+  GameHome: undefined;
+  GameSession: undefined;
+  GameComplete: { scores?: number[]; dayNumber?: number } | undefined;
+  GamePuzzle: { phaseId: number } | undefined;
   Upload: undefined;
   ScanResults: ScanResultPayload | undefined;
   LearningExercises: undefined;

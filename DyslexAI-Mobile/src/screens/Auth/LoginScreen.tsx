@@ -37,8 +37,8 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      await login(email.trim(), password);
-      navigation.replace('Dashboard');
+      const u = await login(email.trim(), password);
+      navigation.replace(u.role === 'teacher' ? 'TeacherDashboard' : 'Dashboard');
     } catch (e) {
       Alert.alert('Login failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {

@@ -9,11 +9,11 @@ type AuthState = {
   loading: boolean;
 };
 
-const GUEST_USER: UserInfo = { id: 0, email: 'guest@local', name: 'Guest' };
+const GUEST_USER: UserInfo = { id: 0, email: 'guest@local', name: 'Guest', role: 'student' };
 
 type AuthContextValue = AuthState & {
-  signup: (name: string, email: string, password: string) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, role?: UserInfo['role']) => Promise<UserInfo>;
+  login: (email: string, password: string) => Promise<UserInfo>;
   logout: () => Promise<void>;
   /** Use app without backend (dev only). Sign up will work once network is fixed. */
   skipAsGuest: () => Promise<void>;
@@ -43,16 +43,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadStored();
   }, [loadStored]);
 
-  const signup = useCallback(async (name: string, email: string, password: string) => {
-    const res = await authApi.signup(name, email, password);
+  const signup = useCallback(async (name: string, email: string, password: string, role?: UserInfo['role']) => {
+    const res = await authApi.signup(name, email, password, role);
     await setAuth(res.access_token, res.user);
     setState({ token: res.access_token, user: res.user, loading: false });
+    return res.user;
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login(email, password);
     await setAuth(res.access_token, res.user);
     setState({ token: res.access_token, user: res.user, loading: false });
+    return res.user;
   }, []);
 
   const logout = useCallback(async () => {

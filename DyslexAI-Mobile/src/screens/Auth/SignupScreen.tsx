@@ -11,7 +11,8 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, fonts } from '../../theme';
@@ -19,12 +20,18 @@ import { useAuth } from '../../context/AuthContext';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+type SignupRoute = RouteProp<RootStackParamList, 'Signup'>;
+
 export default function SignupScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<SignupRoute>();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState<'student' | 'teacher'>(
+    route.params?.defaultRole ?? 'student'
+  );
 
   const { signup } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -52,8 +59,8 @@ export default function SignupScreen() {
     }
     setLoading(true);
     try {
-      await signup(name.trim(), email.trim(), password);
-      navigation.replace('Dashboard');
+      const u = await signup(name.trim(), email.trim(), password, role);
+      navigation.replace(u.role === 'teacher' ? 'TeacherDashboard' : 'Dashboard');
     } catch (e) {
       Alert.alert('Sign up failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
@@ -117,6 +124,30 @@ export default function SignupScreen() {
             placeholderTextColor={colors.textMuted}
             secureTextEntry
           />
+        </View>
+
+        <View style={styles.roleWrap}>
+          <Text style={styles.roleLabel}>Account type</Text>
+          <View style={styles.roleRow}>
+            <TouchableOpacity
+              style={[styles.roleBtn, role === 'student' && styles.roleBtnActive]}
+              onPress={() => setRole('student')}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.roleBtnText, role === 'student' && styles.roleBtnTextActive]}>
+                Student
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.roleBtn, role === 'teacher' && styles.roleBtnActive]}
+              onPress={() => setRole('teacher')}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>
+                Teacher
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -221,4 +252,19 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontFamily: fonts.semiBold,
   },
+  roleWrap: { marginTop: spacing.lg, marginBottom: spacing.md },
+  roleLabel: { fontSize: 14, fontWeight: '500', color: colors.textSecondary, fontFamily: fonts.medium, marginBottom: 8 },
+  roleRow: { flexDirection: 'row', gap: 10 },
+  roleBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  roleBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  roleBtnText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.text },
+  roleBtnTextActive: { color: '#fff' },
 });

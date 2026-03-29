@@ -175,6 +175,13 @@ export default function StudentDashboardScreen() {
       onPress: () => navigation.navigate('Upload'),
     },
     {
+      id: 'game',
+      icon: 'sports-esports' as const,
+      title: 'Game Mode',
+      subtitle: 'Finish the day to unlock a puzzle',
+      onPress: () => navigation.navigate('GameHome'),
+    },
+    {
       id: 'exercises',
       icon: 'fitness-center' as const,
       title: 'Daily Exercises',
