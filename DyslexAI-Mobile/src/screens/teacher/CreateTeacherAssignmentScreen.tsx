@@ -252,31 +252,32 @@ export default function CreateTeacherAssignmentScreen() {
         ) : null}
 
         {assignNow ? (
-        {studentsLoading ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : students.length ? (
-          <View style={{ gap: spacing.sm }}>
-            {students.map((s) => {
-              const active = selectedStudentId === s.id;
-              return (
-                <TouchableOpacity
-                  key={s.id}
-                  style={[styles.pill, active && styles.pillActive]}
-                  onPress={() => setSelectedStudentId(s.id)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                    {s.name} {s.age ? `(${s.age})` : ''}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : (
-          <Text style={styles.muted}>No students yet. Add one below.</Text>
-        )}
+          <>
+            {studentsLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : students.length ? (
+              <View style={{ gap: spacing.sm }}>
+                {students.map((s) => {
+                  const active = selectedStudentId === s.id;
+                  return (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setSelectedStudentId(s.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                        {s.name} {s.age ? `(${s.age})` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.muted}>No students yet. Add one below.</Text>
+            )}
 
-        <View style={{ marginTop: spacing.md }}>
+            <View style={{ marginTop: spacing.md }}>
           <Text style={styles.miniLabel}>Add by email (existing account)</Text>
           <View style={styles.row}>
             <TextInput
@@ -314,6 +315,7 @@ export default function CreateTeacherAssignmentScreen() {
             />
           </View>
         </View>
+          </>
         ) : null}
       </View>
 

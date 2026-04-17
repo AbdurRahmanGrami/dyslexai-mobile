@@ -14,7 +14,9 @@ groq>=0.4.0
 # ONNX Runtime (CPU) for lower latency when USE_ONNX=1
 onnxruntime>=1.16.0
 optimum[onnxruntime]>=1.14.0
-# Auth: SQLite + hashed passwords (bcrypt) + JWT
+# Auth: SQLite or PostgreSQL + hashed passwords (bcrypt) + JWT
 sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+python-dotenv>=1.0.0
 bcrypt>=4.0.0
 python-jose[cryptography]==3.3.0

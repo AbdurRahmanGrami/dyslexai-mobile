@@ -1,32 +1,45 @@
-# Start full DyslexAI stack with one command: DB, exercise backend, scan backend, Expo.
-# Run from repo root: .\start-all.ps1
+param(
+    [switch]$SkipDocker
+)
+
+# Start full DyslexAI stack: DB (optional), exercise backend, scan backend, Expo.
+#   .\start-all.ps1
+#   .\start-all.ps1 -SkipDocker   # Supabase / remote Postgres only (no local Docker DB)
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
-Write-Host "DyslexAI – starting all services from $RepoRoot" -ForegroundColor Cyan
+Write-Host "DyslexAI - starting all services from $RepoRoot" -ForegroundColor Cyan
 
-# 1. PostgreSQL (Docker)
+# 1. PostgreSQL (Docker) - skip if using Supabase / remote Postgres only
 Write-Host "`n[1/4] PostgreSQL..." -ForegroundColor Yellow
 $dbStarted = $false
-try {
-    $null = docker ps 2>$null
-    if (-not $?) {
-        throw "Docker not running"
+if ($SkipDocker) {
+    Write-Host "  Skipped (-SkipDocker). Remote Postgres (e.g. Supabase): no local DB container." -ForegroundColor Gray
+    Write-Host "  Supabase runs in the cloud - you do not start it from this PC. Resume project in dashboard if paused." -ForegroundColor DarkGray
+}
+else {
+    try {
+        $null = docker ps 2>$null
+        if (-not $?) {
+            throw "Docker not running"
+        }
+        $exists = docker ps -a --filter "name=dyslexia-db" --format "{{.Names}}" 2>$null
+        if ($exists -eq "dyslexia-db") {
+            docker start dyslexia-db 2>$null
+            Write-Host "  Started existing container dyslexia-db" -ForegroundColor Green
+        }
+        else {
+            Write-Host '  Creating container (first time)...' -ForegroundColor Gray
+            docker run --name dyslexia-db -e POSTGRES_DB=dyslexia_db -e POSTGRES_USER=dev -e POSTGRES_PASSWORD=devpass -p 5432:5432 -d postgres:15
+            Write-Host "  Created and started dyslexia-db" -ForegroundColor Green
+        }
+        $dbStarted = $true
     }
-    $exists = docker ps -a --filter "name=dyslexia-db" --format "{{.Names}}" 2>$null
-    if ($exists -eq "dyslexia-db") {
-        docker start dyslexia-db 2>$null
-        Write-Host "  Started existing container dyslexia-db" -ForegroundColor Green
-    } else {
-        Write-Host '  Creating container (first time)...' -ForegroundColor Gray
-        docker run --name dyslexia-db -e POSTGRES_DB=dyslexia_db -e POSTGRES_USER=dev -e POSTGRES_PASSWORD=devpass -p 5432:5432 -d postgres:15
-        Write-Host "  Created and started dyslexia-db" -ForegroundColor Green
+    catch {
+        Write-Host "  Docker not available or failed. Start Docker Desktop, then run this script again." -ForegroundColor Red
     }
-    $dbStarted = $true
-} catch {
-    Write-Host "  Docker not available or failed. Start Docker Desktop, then run this script again." -ForegroundColor Red
 }
 
 # Wait for PostgreSQL to accept connections (avoid exercise backend 'Connection refused')
