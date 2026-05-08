@@ -34,7 +34,12 @@ export type RootStackParamList = {
   Upload: undefined;
   ScanResults: ScanResultPayload | undefined;
   LearningExercises: undefined;
-  Practice: { exerciseType?: 'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing' } | undefined;
+  Practice:
+    | {
+        exerciseType?: 'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing';
+        assignmentId?: number;
+      }
+    | undefined;
   Library: undefined;
   Settings: undefined;
   About: undefined;

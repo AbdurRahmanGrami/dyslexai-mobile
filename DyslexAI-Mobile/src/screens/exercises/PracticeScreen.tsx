@@ -32,12 +32,14 @@ import {
 import { EXERCISE_API_BASE_URL } from '../../constants/config';
 import { awardPracticeXP } from '../../utils/gamification';
 import { TracingCanvas, type TracingCanvasRef, type TracingScore } from '../../components/TracingCanvas';
+import { getAssignment, type AssignmentDetail } from '../../api/assignments';
 
 type Phase = 'loading' | 'exercise' | 'submitting' | 'result';
 
 export default function PracticeScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Practice'>>();
   const exerciseType = route.params?.exerciseType;
+  const assignmentId = route.params?.assignmentId;
   const { user } = useAuth();
   const userId = user?.id ?? 0;
   const [phase, setPhase] = useState<Phase>('loading');
@@ -53,11 +55,55 @@ export default function PracticeScreen() {
   const [hasTraceStrokes, setHasTraceStrokes] = useState(false);
   const [tracingLetterIndex, setTracingLetterIndex] = useState(0);
   const [tracingLetterScores, setTracingLetterScores] = useState<TracingScore[]>([]);
+  const [assignment, setAssignment] = useState<AssignmentDetail | null>(null);
+  const [assignmentIndex, setAssignmentIndex] = useState(0);
   const startTimeRef = useRef<number>(0);
   const loadingHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const safetyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retriedAfter404Ref = useRef(false);
   const tracingCanvasRef = useRef<TracingCanvasRef>(null);
+
+  const mapAssignmentExercise = (detail: AssignmentDetail, index: number): ExerciseResponse | null => {
+    const item = detail.exercises[index];
+    if (!item) return null;
+    return {
+      id: item.id,
+      type: item.type,
+      content: item.content,
+      expected: item.expected,
+      target_words: item.target_words ?? [],
+      difficulty: item.difficulty ?? 1,
+      age_group: 'all',
+      source: 'assignment',
+    };
+  };
+
+  const loadAssignmentExercise = async (overrideIndex?: number) => {
+    if (!assignmentId) return;
+    setPhase('loading');
+    setError(null);
+    try {
+      const sid = (await getStoredStudentId(userId)) ?? (await getOrCreateStudent(userId, user?.name ?? 'Learner', 10));
+      setStudentId(sid);
+      const detail = await getAssignment(assignmentId);
+      setAssignment(detail);
+      const pendingIndex = detail.exercises.findIndex((item) => !item.completed);
+      const idx = typeof overrideIndex === 'number' ? overrideIndex : pendingIndex >= 0 ? pendingIndex : 0;
+      const ex = mapAssignmentExercise(detail, idx);
+      if (!ex) {
+        setError('This assignment has no exercises to practice yet.');
+        setPhase('exercise');
+        return;
+      }
+      setAssignmentIndex(idx);
+      setExercise(ex);
+      startTimeRef.current = Date.now();
+      setPhase('exercise');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load assignment exercise');
+      setPhase('exercise');
+    }
+  };
 
   const loadNext = async (overrideStudentId?: string, avoidExerciseId?: string) => {
     setError(null);
@@ -149,8 +195,12 @@ export default function PracticeScreen() {
   };
 
   useEffect(() => {
-    loadNext();
-  }, [userId, exerciseType]);
+    if (assignmentId) {
+      loadAssignmentExercise();
+    } else {
+      loadNext();
+    }
+  }, [userId, exerciseType, assignmentId]);
 
   const isHandwriting = exercise?.type === 'handwriting';
   const isTracing = exercise?.type === 'tracing';
@@ -217,6 +267,17 @@ export default function PracticeScreen() {
       setError(e instanceof Error ? e.message : 'Submit failed');
       setPhase('result');
     }
+  };
+
+  const handleNextExercise = async () => {
+    if (assignmentId && assignment) {
+      const nextIdx = assignmentIndex + 1;
+      if (nextIdx < assignment.exercises.length) {
+        await loadAssignmentExercise(nextIdx);
+        return;
+      }
+    }
+    await loadNext(undefined, exercise?.id);
   };
 
   const requestImagePermission = async (type: 'camera' | 'library') => {
@@ -287,7 +348,7 @@ export default function PracticeScreen() {
           <MaterialIcons name="error-outline" size={48} color={colors.error} />
           <Text style={styles.errorText}>{error}</Text>
           <Text style={styles.loadingUrlText}>URL: {EXERCISE_API_BASE_URL}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={loadNext} disabled={generatingMore}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => void loadNext()} disabled={generatingMore}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
           {noExercisesFound && (
@@ -352,21 +413,23 @@ export default function PracticeScreen() {
           )}
         </View>
         <View style={styles.resultActions}>
-          <TouchableOpacity style={styles.nextButton} onPress={() => loadNext(undefined, exercise?.id)}>
+          <TouchableOpacity style={styles.nextButton} onPress={handleNextExercise}>
             <Text style={styles.nextButtonText}>Next exercise</Text>
             <MaterialIcons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.generateMoreButton}
-            onPress={handleGenerateMore}
-            disabled={generatingMore}
-          >
-            {generatingMore ? (
-              <ActivityIndicator color={colors.primary} size="small" />
-            ) : (
-              <Text style={styles.generateMoreButtonText}>Generate more exercises</Text>
-            )}
-          </TouchableOpacity>
+          {!assignmentId && (
+            <TouchableOpacity
+              style={styles.generateMoreButton}
+              onPress={handleGenerateMore}
+              disabled={generatingMore}
+            >
+              {generatingMore ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <Text style={styles.generateMoreButtonText}>Generate more exercises</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     );
@@ -392,6 +455,11 @@ export default function PracticeScreen() {
           <>
             <View style={styles.promptCard}>
               <Text style={styles.promptLabel}>Exercise{exercise.type ? ` (${exercise.type})` : ''}</Text>
+              {assignment ? (
+                <Text style={styles.assignmentMeta}>
+                  Assignment: {assignment.title} ({assignmentIndex + 1}/{assignment.exercises.length})
+                </Text>
+              ) : null}
               <Text style={styles.promptContent}>{exercise.content}</Text>
             </View>
 
@@ -521,6 +589,7 @@ const styles = StyleSheet.create({
   errorBannerLink: { color: colors.primary, fontWeight: '600', fontFamily: fonts.semiBold },
   promptCard: { backgroundColor: colors.surface, padding: spacing.lg, borderRadius: borderRadius.md, marginBottom: spacing.md },
   promptLabel: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs, fontFamily: fonts.regular },
+  assignmentMeta: { fontSize: 12, color: colors.primary, marginBottom: spacing.xs, fontFamily: fonts.semiBold },
   promptContent: { fontSize: 18, color: colors.text, lineHeight: 26, fontFamily: fonts.regular },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.xs, fontFamily: fonts.semiBold },
   input: {

@@ -62,6 +62,17 @@ export type StudentStats = {
   accuracy_by_type: Record<string, number>;
 };
 
+export type StudentSessionHistoryItem = {
+  session_id: string;
+  submitted_at?: string | null;
+  score: number;
+  trace_score?: number | null;
+  duration_seconds?: number | null;
+  exercise_id?: string | null;
+  exercise_type?: string | null;
+  exercise_content?: string | null;
+};
+
 // --- API calls ---
 
 const REQUEST_TIMEOUT_MS = 90 * 1000; // 90s – allow slow backend/DB (was 25s and broke loading)
@@ -126,7 +137,7 @@ export async function getNextExercise(
 ): Promise<ExerciseResponse> {
   const id = typeof studentId === 'string' ? studentId : (studentId as { id?: string })?.id ?? '';
   let path = `/exercises/next?student_id=${encodeURIComponent(id)}`;
-  if (type && [EXERCISE_TYPES.WORD_TYPING, EXERCISE_TYPES.SENTENCE_TYPING, EXERCISE_TYPES.HANDWRITING, EXERCISE_TYPES.TRACING].includes(type)) {
+  if (type && ([EXERCISE_TYPES.WORD_TYPING, EXERCISE_TYPES.SENTENCE_TYPING, EXERCISE_TYPES.HANDWRITING, EXERCISE_TYPES.TRACING] as string[]).includes(type)) {
     path += `&type=${encodeURIComponent(type)}`;
   }
   if (avoidExerciseId) {
@@ -235,7 +246,7 @@ export async function generateExercises(
   type?: string
 ): Promise<{ message: string; generated: number; exercises?: Array<{ type: string; content: string; target_words: string[] }> }> {
   let path = `/exercises/generate?student_id=${encodeURIComponent(studentId)}`;
-  if (type && [EXERCISE_TYPES.WORD_TYPING, EXERCISE_TYPES.SENTENCE_TYPING, EXERCISE_TYPES.HANDWRITING, EXERCISE_TYPES.TRACING].includes(type)) {
+  if (type && ([EXERCISE_TYPES.WORD_TYPING, EXERCISE_TYPES.SENTENCE_TYPING, EXERCISE_TYPES.HANDWRITING, EXERCISE_TYPES.TRACING] as string[]).includes(type)) {
     path += `&type=${encodeURIComponent(type)}`;
   }
   return request(path, { method: 'POST' });
@@ -244,4 +255,31 @@ export async function generateExercises(
 /** Get full progress report for dashboard. */
 export async function getStudentStats(studentId: string): Promise<StudentStats> {
   return request<StudentStats>(`/students/${studentId}/stats`);
+}
+
+/** Get user session history with exercise-level details. */
+export async function getStudentSessionHistory(
+  studentId: string,
+  options: { limit?: number; type?: string } = {}
+): Promise<StudentSessionHistoryItem[]> {
+  const q: string[] = [];
+  if (options.limit != null) q.push(`limit=${encodeURIComponent(String(options.limit))}`);
+  if (options.type) q.push(`type=${encodeURIComponent(options.type)}`);
+  const qs = q.length ? `?${q.join('&')}` : '';
+  try {
+    return await request<StudentSessionHistoryItem[]>(`/students/${studentId}/sessions${qs}`);
+  } catch (firstErr) {
+    // Backward-compatible fallback for backends exposing history under /history
+    try {
+      return await request<StudentSessionHistoryItem[]>(`/students/${studentId}/history${qs}`);
+    } catch (secondErr) {
+      const firstMsg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      const secondMsg = secondErr instanceof Error ? secondErr.message : String(secondErr);
+      // If neither route exists yet, keep app functional (history can be hidden/fallback).
+      if (/404|not found/i.test(firstMsg) && /404|not found/i.test(secondMsg)) {
+        return [];
+      }
+      throw secondErr;
+    }
+  }
 }

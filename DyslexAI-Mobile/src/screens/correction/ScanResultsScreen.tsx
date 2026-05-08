@@ -11,6 +11,7 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../types/navigation';
 import { colors, spacing, borderRadius, fonts } from '../../theme';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -19,10 +20,11 @@ import { saveScanResult } from '../../utils/libraryStorage';
 import { awardScanSavedXP } from '../../utils/gamification';
 
 type ScanResultsRoute = RouteProp<RootStackParamList, 'ScanResults'>;
+type ScanResultsNav = NativeStackNavigationProp<RootStackParamList, 'ScanResults'>;
 
 export default function ScanResultsScreen() {
   const route = useRoute<ScanResultsRoute>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<ScanResultsNav>();
   const { user } = useAuth();
   const userId = user?.id ?? 0;
   const params = route.params;

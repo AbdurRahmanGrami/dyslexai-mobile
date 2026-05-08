@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { getStoredStudentId } from '../../utils/studentStorage';
-import { getStudentStats, type StudentStats } from '../../api/exercises';
+import { getStudentStats, getStudentSessionHistory, type StudentSessionHistoryItem, type StudentStats } from '../../api/exercises';
+import { listAssignments, getAssignment, type AssignmentListItem } from '../../api/assignments';
 
 const LEARNING_MODULES: Array<{ id: 'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing'; title: string; subtitle: string; icon: keyof typeof MaterialIcons.glyphMap }> = [
   { id: 'word_typing', title: 'Word Typing', subtitle: 'Spell and type individual words', icon: 'sort' },
@@ -22,18 +23,38 @@ export default function LearningExercisesScreen() {
   const [stats, setStats] = useState<StudentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [history, setHistory] = useState<StudentSessionHistoryItem[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing'>('all');
+  const [studentAssignments, setStudentAssignments] = useState<AssignmentListItem[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const loadStats = async () => {
     try {
       const studentId = await getStoredStudentId(user?.id ?? 0);
       if (studentId) {
-        const s = await getStudentStats(studentId);
-        setStats(s);
+        const [statsRes, sessionsRes, assignmentsRes] = await Promise.allSettled([
+          getStudentStats(studentId),
+          getStudentSessionHistory(studentId, { limit: 20 }),
+          listAssignments({ studentId }),
+        ]);
+        setStats(statsRes.status === 'fulfilled' ? statsRes.value : null);
+        setHistory(sessionsRes.status === 'fulfilled' ? sessionsRes.value : []);
+        setStudentAssignments(assignmentsRes.status === 'fulfilled' ? assignmentsRes.value : []);
+        setHistoryError(
+          sessionsRes.status === 'rejected'
+            ? 'Session history endpoint is not available yet on backend.'
+            : null
+        );
       } else {
         setStats(null);
+        setHistory([]);
+        setStudentAssignments([]);
       }
     } catch {
       setStats(null);
+      setHistory([]);
+      setStudentAssignments([]);
+      setHistoryError('Could not load session history from the exercise backend.');
     }
   };
 
@@ -63,7 +84,22 @@ export default function LearningExercisesScreen() {
   const totalSessions = stats?.total_sessions ?? 0;
   const avgScore = stats?.average_score ?? 0;
   const trend = stats?.score_trend ?? [];
-  const starsToday = trend.length; // approximate: last N sessions as "recent"
+  const visibleHistory = useMemo(
+    () =>
+      historyFilter === 'all'
+        ? history
+        : history.filter((item) => (item.exercise_type ?? '').toLowerCase() === historyFilter),
+    [history, historyFilter]
+  );
+
+  const openAssignment = async (assignmentId: number) => {
+    try {
+      await getAssignment(assignmentId);
+      navigation.navigate('Practice', { assignmentId });
+    } catch {
+      navigation.navigate('Practice');
+    }
+  };
 
   return (
     <ScrollView
@@ -87,6 +123,34 @@ export default function LearningExercisesScreen() {
         </View>
         <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </TouchableOpacity>
+
+      <View style={styles.section}>
+        <Text style={styles.heading}>Assigned To You</Text>
+        <Text style={styles.subheading}>Assignments from your teacher</Text>
+        {studentAssignments.length === 0 ? (
+          <Text style={styles.muted}>No active assignments right now.</Text>
+        ) : (
+          studentAssignments.slice(0, 5).map((item) => (
+            <TouchableOpacity
+              key={`assignment-${item.id}`}
+              style={styles.assignmentCard}
+              onPress={() => openAssignment(item.id)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.assignmentTitle}>{item.title}</Text>
+                <Text style={styles.assignmentMeta}>
+                  {item.exercise_count} exercises • {item.completed_exercises}/{item.exercise_count} complete
+                </Text>
+                {item.due_at ? (
+                  <Text style={styles.assignmentDue}>Due: {new Date(item.due_at).toLocaleDateString()}</Text>
+                ) : null}
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ))
+        )}
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.heading}>Your Progress</Text>
@@ -135,6 +199,55 @@ export default function LearningExercisesScreen() {
             <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.heading}>Previous Sessions</Text>
+        <Text style={styles.subheading}>Exercise-wise history from your last attempts</Text>
+        <View style={styles.filterRow}>
+          {(['all', 'word_typing', 'sentence_typing', 'handwriting', 'tracing'] as const).map((key) => {
+            const active = historyFilter === key;
+            const label =
+              key === 'all'
+                ? 'All'
+                : key === 'word_typing'
+                  ? 'Word'
+                  : key === 'sentence_typing'
+                    ? 'Sentence'
+                    : key === 'handwriting'
+                      ? 'Handwriting'
+                      : 'Tracing';
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.filterPill, active && styles.filterPillActive]}
+                onPress={() => setHistoryFilter(key)}
+              >
+                <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {historyError ? <Text style={styles.historyError}>{historyError}</Text> : null}
+        {visibleHistory.length === 0 ? (
+          <Text style={styles.muted}>No previous sessions for this filter yet.</Text>
+        ) : (
+          visibleHistory.slice(0, 12).map((item, idx) => (
+            <View key={`${item.session_id}-${idx}`} style={styles.historyRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.historyTitle}>
+                  {(item.exercise_type ?? 'exercise').replace(/_/g, ' ')} • {Math.round(item.score * 100)}%
+                </Text>
+                <Text style={styles.historySub} numberOfLines={1}>
+                  {item.exercise_content ?? 'Practice session'}
+                </Text>
+              </View>
+              <Text style={styles.historyTime}>
+                {item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : 'Recent'}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -220,4 +333,40 @@ const styles = StyleSheet.create({
   startPracticeContent: { flex: 1 },
   startPracticeTitle: { fontSize: 18, fontWeight: '700', color: '#fff', fontFamily: fonts.bold },
   startPracticeSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.9)', marginTop: 2, fontFamily: fonts.regular },
+  assignmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  assignmentTitle: { fontSize: 15, color: colors.text, fontFamily: fonts.semiBold },
+  assignmentMeta: { marginTop: 4, fontSize: 12, color: colors.textSecondary, fontFamily: fonts.regular },
+  assignmentDue: { marginTop: 2, fontSize: 12, color: colors.warning, fontFamily: fonts.regular },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  filterPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  filterPillActive: { borderColor: colors.primary, backgroundColor: colors.primary + '22' },
+  filterPillText: { fontSize: 12, color: colors.textSecondary, fontFamily: fonts.regular },
+  filterPillTextActive: { color: colors.primary, fontFamily: fonts.semiBold },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  historyTitle: { fontSize: 13, color: colors.text, fontFamily: fonts.semiBold, textTransform: 'capitalize' },
+  historySub: { marginTop: 2, fontSize: 12, color: colors.textSecondary, fontFamily: fonts.regular },
+  historyTime: { fontSize: 11, color: colors.textMuted, fontFamily: fonts.regular },
+  historyError: { fontSize: 12, color: colors.error, marginBottom: spacing.sm, fontFamily: fonts.regular },
 });

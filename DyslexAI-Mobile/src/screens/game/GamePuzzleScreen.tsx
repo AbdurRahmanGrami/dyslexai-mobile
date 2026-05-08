@@ -61,7 +61,7 @@ export default function GamePuzzleScreen() {
 
   const earnedSet = useMemo(() => new Set(puzzle?.pieces_earned ?? []), [puzzle?.pieces_earned]);
   const earnedCount = puzzle?.pieces_earned?.length ?? 0;
-  const totalSlots = puzzle?.pieces_total ?? (endDay - startDay + 1);
+  const totalSlots = puzzle?.pieces_total && puzzle.pieces_total > 0 ? puzzle.pieces_total : (endDay - startDay + 1);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -90,20 +90,26 @@ export default function GamePuzzleScreen() {
             <Text style={styles.bigCounter}>
               {earnedCount} / {totalSlots} pieces revealed
             </Text>
+            {totalSlots <= 0 ? (
+              <Text style={styles.subtitle}>Puzzle slots are unavailable from backend right now.</Text>
+            ) : null}
           </View>
 
-          <View style={styles.grid}>
-            {Array.from({ length: totalSlots }, (_, i) => startDay + i).map((day) => {
-              const earned = earnedSet.has(day);
-              return (
-                <View key={day} style={[styles.tile, earned ? styles.tileEarned : styles.tileLocked]}>
-                  <Text style={[styles.tileText, earned ? styles.tileTextEarned : styles.tileTextLocked]}>
-                    {day}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
+          {totalSlots > 0 ? (
+            <View style={styles.grid}>
+              {Array.from({ length: totalSlots }, (_, i) => startDay + i).map((day) => {
+                const earned = earnedSet.has(day);
+                return (
+                  <View key={day} style={[styles.tile, earned ? styles.tileEarned : styles.tileLocked]}>
+                    <Text style={[styles.tileText, earned ? styles.tileTextEarned : styles.tileTextLocked]}>
+                      {earned ? '🧩' : '🔒'}
+                    </Text>
+                    <Text style={styles.dayLabel}>Day {day}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
 
           <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('GameHome')}>
             <Text style={styles.secondaryButtonText}>Game home</Text>
@@ -146,5 +152,6 @@ const styles = StyleSheet.create({
   tileText: { fontFamily: fonts.semiBold, fontSize: 12 },
   tileTextEarned: { color: colors.primary },
   tileTextLocked: { color: colors.textMuted },
+  dayLabel: { fontSize: 10, color: colors.textSecondary, marginTop: 2, fontFamily: fonts.regular },
 });
 

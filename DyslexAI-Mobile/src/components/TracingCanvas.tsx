@@ -10,8 +10,9 @@ const STROKE_WIDTH = 14;
 const TEMPLATE_STROKE = colors.textMuted;
 const USER_STROKE = colors.primary;
 const DASH_ARRAY = '8 6';
-const SCORE_THRESHOLD = 0.15;
+const SCORE_THRESHOLD = 0.3;
 const MIN_POINTS_FOR_SCORE = 15;
+const RESAMPLE_SIZE = 72;
 
 export type TracingScore = {
   score: number;
@@ -41,6 +42,88 @@ export const TracingCanvas = forwardRef<TracingCanvasRef, Props>(function Tracin
   { expected, onStrokeChange },
   ref
 ) {
+  const distance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);
+  const pathLength = (pts: Point[]): number => {
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += distance(pts[i - 1], pts[i]);
+    return total;
+  };
+  const pointToSegmentDistance = (p: Point, a: Point, b: Point): number => {
+    const vx = b.x - a.x;
+    const vy = b.y - a.y;
+    const wx = p.x - a.x;
+    const wy = p.y - a.y;
+    const c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return distance(p, a);
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= 0) return distance(p, a);
+    if (c2 <= c1) return distance(p, b);
+    const t = c1 / c2;
+    return distance(p, { x: a.x + t * vx, y: a.y + t * vy });
+  };
+  const nearestDistanceToPolyline = (p: Point, polyline: Point[]): number => {
+    if (polyline.length < 2) return 1;
+    let best = 1;
+    for (let i = 1; i < polyline.length; i++) {
+      const d = pointToSegmentDistance(p, polyline[i - 1], polyline[i]);
+      if (d < best) best = d;
+    }
+    return best;
+  };
+  const densify = (pts: Point[], step = 0.015): Point[] => {
+    if (pts.length < 2) return pts;
+    const out: Point[] = [pts[0]];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const segLen = distance(a, b);
+      const pointsToAdd = Math.max(1, Math.floor(segLen / step));
+      for (let j = 1; j <= pointsToAdd; j++) {
+        const t = j / pointsToAdd;
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return out;
+  };
+  const resampleByArcLength = (pts: Point[], count: number): Point[] => {
+    if (pts.length < 2) return pts;
+    const polyline = densify(pts);
+    const total = pathLength(polyline);
+    if (total === 0) return polyline.slice(0, Math.min(polyline.length, count));
+    const interval = total / Math.max(1, count - 1);
+    const out: Point[] = [polyline[0]];
+    let target = interval;
+    let walked = 0;
+    for (let i = 1; i < polyline.length && out.length < count - 1; i++) {
+      const a = polyline[i - 1];
+      const b = polyline[i];
+      const segLen = distance(a, b);
+      while (walked + segLen >= target && out.length < count - 1) {
+        const t = (target - walked) / segLen;
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+        target += interval;
+      }
+      walked += segLen;
+    }
+    out.push(polyline[polyline.length - 1]);
+    return out;
+  };
+  const normalizePoints = (pts: Point[]): Point[] => {
+    if (pts.length === 0) return pts;
+    const meanX = pts.reduce((sum, p) => sum + p.x, 0) / pts.length;
+    const meanY = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
+    const centered = pts.map((p) => ({ x: p.x - meanX, y: p.y - meanY }));
+    const maxRange = Math.max(
+      0.0001,
+      Math.max(...centered.map((p) => p.x)) - Math.min(...centered.map((p) => p.x)),
+      Math.max(...centered.map((p) => p.y)) - Math.min(...centered.map((p) => p.y))
+    );
+    return centered.map((p) => ({ x: p.x / maxRange, y: p.y / maxRange }));
+  };
+  const oneWayMeanDistance = (from: Point[], toPolyline: Point[]): number => {
+    if (from.length === 0 || toPolyline.length < 2) return 1;
+    return from.reduce((sum, p) => sum + nearestDistanceToPolyline(p, toPolyline), 0) / from.length;
+  };
   const [paths, setPaths] = useState<Array<{ d: string | null; points: Point[] | null }>>([]);
   const [userPoints, setUserPoints] = useState<Point[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Point[]>([]);
@@ -168,16 +251,9 @@ export const TracingCanvas = forwardRef<TracingCanvasRef, Props>(function Tracin
     if (allRefPoints.length === 0) {
       return { score: 0.85, stroke_errors: [] };
     }
-    let totalDist = 0;
-    for (const p of all) {
-      let minD = 1;
-      for (const r of allRefPoints) {
-        const d = Math.hypot(p.x - r.x, p.y - r.y);
-        if (d < minD) minD = d;
-      }
-      totalDist += minD;
-    }
-    const meanDist = totalDist / all.length;
+    const userCurve = normalizePoints(resampleByArcLength(all, RESAMPLE_SIZE));
+    const refCurve = normalizePoints(resampleByArcLength(allRefPoints, RESAMPLE_SIZE));
+    const meanDist = (oneWayMeanDistance(userCurve, refCurve) + oneWayMeanDistance(refCurve, userCurve)) / 2;
     const score = Math.max(0, Math.min(1, 1 - meanDist / SCORE_THRESHOLD));
     const stroke_errors = expectedClean.split('').map((letter) => ({ letter, accuracy: score }));
     return { score, stroke_errors };

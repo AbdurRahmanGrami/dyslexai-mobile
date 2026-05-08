@@ -195,7 +195,7 @@ export default function CreateTeacherAssignmentScreen() {
                 student_age: 10,
                 count: Number(count) || 3,
               }
-            : null,
+            : undefined,
       });
 
       Alert.alert('Assignment created', `Saved assignment #${res.id}.`);

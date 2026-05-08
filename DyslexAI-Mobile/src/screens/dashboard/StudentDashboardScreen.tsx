@@ -18,10 +18,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { getSavedScans } from '../../utils/libraryStorage';
 import { getStoredStudentId, getOrCreateStudent, clearStoredStudent } from '../../utils/studentStorage';
-import { getStudentStats, type StudentStats } from '../../api/exercises';
+import { getStudentStats, getStudentSessionHistory, type StudentSessionHistoryItem, type StudentStats } from '../../api/exercises';
 import { checkBackends, type BackendStatus } from '../../api/health';
 import { EXERCISE_API_BASE_URL } from '../../constants/config';
 import { getGamificationState, BADGE_INFO, type BadgeId } from '../../utils/gamification';
+import { listAssignments } from '../../api/assignments';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -68,6 +69,8 @@ export default function StudentDashboardScreen() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
   const [exerciseBackendError, setExerciseBackendError] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [sessionHistory, setSessionHistory] = useState<StudentSessionHistoryItem[]>([]);
+  const [pendingAssignments, setPendingAssignments] = useState(0);
 
   const menuItems: Array<{ key: keyof RootStackParamList; label: string; icon: keyof typeof MaterialIcons.glyphMap }> = [
     { key: 'Settings', label: 'Settings', icon: 'settings' },
@@ -126,15 +129,23 @@ export default function StudentDashboardScreen() {
           return;
         }
       }
-      const studentStats = await getStudentStats(studentId);
-      setStats(studentStats);
-      const trend = studentStats.score_trend || [];
+      const [statsRes, historyRes, assignmentsRes] = await Promise.allSettled([
+        getStudentStats(studentId),
+        getStudentSessionHistory(studentId, { limit: 30 }),
+        listAssignments({ studentId }),
+      ]);
+      setStats(statsRes.status === 'fulfilled' ? statsRes.value : null);
+      setSessionHistory(historyRes.status === 'fulfilled' ? historyRes.value : []);
+      const assignments = assignmentsRes.status === 'fulfilled' ? assignmentsRes.value : [];
+      setPendingAssignments(assignments.filter((item) => item.completed_exercises < item.exercise_count).length);
+      const studentStats = statsRes.status === 'fulfilled' ? statsRes.value : null;
+      const trend = studentStats?.score_trend || [];
       trend.slice(-5).reverse().forEach((score, i) => {
         items.push({
           id: `practice-${i}-${trend.length}`,
           type: 'practice',
           title: `Practice session`,
-          time: studentStats.total_sessions ? `Session ${Math.max(1, studentStats.total_sessions - trend.length + i + 1)}` : '',
+          time: studentStats?.total_sessions ? `Session ${Math.max(1, studentStats.total_sessions - trend.length + i + 1)}` : '',
           xp: `${Math.round(score * 100)}%`,
         });
       });
@@ -142,6 +153,8 @@ export default function StudentDashboardScreen() {
       const msg = e instanceof Error ? e.message : 'Could not load progress';
       setExerciseBackendError(msg);
       setStats(null);
+      setSessionHistory([]);
+      setPendingAssignments(0);
       if (/student not found|404/i.test(msg)) {
         await clearStoredStudent(user?.id ?? 0);
       }
@@ -196,6 +209,23 @@ export default function StudentDashboardScreen() {
       onPress: () => navigation.navigate('Library'),
     },
   ];
+  const sessionsLast7Days = sessionHistory.filter((item) => {
+    if (!item.submitted_at) return false;
+    return Date.now() - new Date(item.submitted_at).getTime() <= 7 * 24 * 60 * 60 * 1000;
+  }).length;
+  const bestRecentScore = sessionHistory.length
+    ? Math.round(Math.max(...sessionHistory.slice(0, 10).map((item) => item.score ?? 0)) * 100)
+    : 0;
+  const weakArea = stats?.accuracy_by_type
+    ? Object.entries(stats.accuracy_by_type).sort((a, b) => a[1] - b[1])[0]?.[0]
+    : null;
+  const exerciseTypeBuckets = Object.entries(
+    sessionHistory.reduce<Record<string, number>>((acc, item) => {
+      const key = item.exercise_type ?? 'other';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {})
+  );
 
   return (
     <>
@@ -356,6 +386,21 @@ export default function StudentDashboardScreen() {
         </View>
       )}
 
+      {pendingAssignments > 0 && (
+        <View style={styles.assignmentInboxCard}>
+          <MaterialIcons name="assignment" size={24} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.assignmentInboxTitle}>Assignment Inbox</Text>
+            <Text style={styles.assignmentInboxSub}>
+              You have {pendingAssignments} pending assignment{pendingAssignments > 1 ? 's' : ''}.
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('LearningExercises')}>
+            <Text style={styles.assignmentInboxLink}>Open</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {(!exerciseBackendError && (backendStatus?.exercise || stats !== null)) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your progress</Text>
@@ -378,6 +423,20 @@ export default function StudentDashboardScreen() {
               <View style={styles.progressOverviewStat}>
                 <Text style={styles.progressOverviewValue}>{stats.total_words_practiced}</Text>
                 <Text style={styles.progressOverviewLabel}>Words practiced</Text>
+              </View>
+            </View>
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiPill}>
+                <Text style={styles.kpiValue}>{sessionsLast7Days}</Text>
+                <Text style={styles.kpiLabel}>Last 7 days</Text>
+              </View>
+              <View style={styles.kpiPill}>
+                <Text style={styles.kpiValue}>{bestRecentScore}%</Text>
+                <Text style={styles.kpiLabel}>Best recent score</Text>
+              </View>
+              <View style={styles.kpiPill}>
+                <Text style={styles.kpiValue}>{weakArea ? exerciseTypeLabel(weakArea) : '—'}</Text>
+                <Text style={styles.kpiLabel}>Needs focus</Text>
               </View>
             </View>
           </View>
@@ -424,6 +483,28 @@ export default function StudentDashboardScreen() {
                   <Text style={styles.accuracyPct}>{Math.round(acc * 100)}%</Text>
                 </View>
               ))}
+            </View>
+          )}
+
+          {exerciseTypeBuckets.length > 0 && (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>Practice mix</Text>
+              <Text style={styles.chartSubtitle}>How your recent sessions are distributed by exercise type</Text>
+              {exerciseTypeBuckets.map(([type, count]) => {
+                const maxCount = Math.max(...exerciseTypeBuckets.map((entry) => entry[1]));
+                const widthPct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+                return (
+                  <View key={`mix-${type}`} style={styles.accuracyRow}>
+                    <Text style={styles.accuracyLabel} numberOfLines={1}>
+                      {exerciseTypeLabel(type)}
+                    </Text>
+                    <View style={styles.accuracyBarBg}>
+                      <View style={[styles.practiceMixFill, { width: `${widthPct}%` }]} />
+                    </View>
+                    <Text style={styles.accuracyPct}>{count}</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
 
@@ -585,6 +666,31 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     marginBottom: spacing.lg,
   },
+  assignmentInboxCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  assignmentInboxTitle: {
+    fontSize: 15,
+    color: colors.text,
+    fontFamily: fonts.semiBold,
+  },
+  assignmentInboxSub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
+  },
+  assignmentInboxLink: {
+    fontSize: 13,
+    color: colors.primary,
+    fontFamily: fonts.semiBold,
+  },
   gameRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: spacing.sm },
   gameStat: { alignItems: 'center' },
   gameStatValue: { fontSize: 18, fontWeight: '700', color: colors.primary, fontFamily: fonts.semiBold },
@@ -675,6 +781,29 @@ const styles = StyleSheet.create({
     height: 32,
     backgroundColor: colors.divider,
   },
+  kpiRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  kpiPill: {
+    flex: 1,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  kpiValue: {
+    fontSize: 13,
+    color: colors.text,
+    fontFamily: fonts.semiBold,
+  },
+  kpiLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    color: colors.textMuted,
+    fontFamily: fonts.regular,
+  },
 
   // Charts
   chartCard: {
@@ -754,6 +883,11 @@ const styles = StyleSheet.create({
   accuracyBarFill: {
     height: '100%',
     backgroundColor: colors.primary,
+    borderRadius: 6,
+  },
+  practiceMixFill: {
+    height: '100%',
+    backgroundColor: colors.success,
     borderRadius: 6,
   },
   accuracyPct: {
