@@ -2,6 +2,8 @@ node_modules/
 .env
 build/
 dist/
+.cursor/mcp.json
+.env
 
 # Android
 android/.gradle/
