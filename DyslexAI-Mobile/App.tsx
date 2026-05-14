@@ -14,6 +14,7 @@ import LoginScreen from './src/screens/Auth/LoginScreen';
 import StudentDashboardScreen from './src/screens/dashboard/StudentDashboardScreen';
 import ScanResultsScreen from './src/screens/correction/ScanResultsScreen';
 import LearningExercisesScreen from './src/screens/exercises/LearningExercisesScreen';
+import StudentAssignmentsScreen from './src/screens/exercises/StudentAssignmentsScreen';
 import PracticeScreen from './src/screens/exercises/PracticeScreen';
 import UploadScreen from './src/screens/upload/UploadScreen';
 import LibraryScreen from './src/screens/Library/LibraryScreen';
@@ -109,6 +110,11 @@ function AppNavigator() {
             name="LearningExercises"
             component={LearningExercisesScreen}
             options={{ title: 'Learning Exercises' }}
+          />
+          <Stack.Screen
+            name="StudentAssignments"
+            component={StudentAssignmentsScreen}
+            options={{ title: 'My Assignments' }}
           />
           <Stack.Screen
             name="Practice"

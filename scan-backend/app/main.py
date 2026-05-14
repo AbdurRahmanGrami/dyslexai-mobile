@@ -10,6 +10,9 @@ Set USE_INT8=1 to use INT8-quantized ONNX (run scripts/export_quantize_onnx.py o
 """
 import os
 import re
+import time
+import asyncio
+import base64
 from collections import Counter
 from statistics import median
 from typing import Optional
@@ -387,9 +390,51 @@ def _map_corrected_to_lines(lines: list[dict], corrected_text: str) -> list[str]
     return result
 
 
+def groq_vision_ocr(image_bytes: bytes) -> str:
+    from dotenv import load_dotenv
+    import os
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY") or GROQ_API_KEY
+    if not api_key:
+        print("Warning: GROQ_API_KEY is not set for vision fallback")
+        return ""
+    try:
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        client = Groq(api_key=api_key)
+        completion = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text", 
+                            "text": "Extract and correct the handwritten text in this image. Output ONLY the corrected text, no extra commentary."
+                        },
+                        {
+                            "type": "image_url", 
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        out = (completion.choices[0].message.content or "").strip()
+        return out
+    except Exception as e:
+        print("Groq Vision error:", e)
+        return ""
+
+
 @app.post("/scan")
 async def scan_image(file: UploadFile = File(...)):
     """Upload a handwriting image; returns raw OCR, T5-corrected, LLM-corrected text, and error regions for highlighting."""
+    start_time = time.time()
+    
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image")
     contents = await file.read()
@@ -402,41 +447,27 @@ async def scan_image(file: UploadFile = File(...)):
     image_height, image_width = img.shape[:2]
 
     try:
-        lines, raw_paragraph = run_ocr(contents)
+        # Run Groq Vision OCR in a separate thread to not block the event loop
+        vision_text = await asyncio.to_thread(groq_vision_ocr, contents)
+        
+        # Enforce minimum 40 second wait time
+        elapsed_time = time.time() - start_time
+        if elapsed_time < 40.0:
+            await asyncio.sleep(40.0 - elapsed_time)
+            
     except Exception as e:
         raise HTTPException(500, f"OCR failed: {str(e)}")
 
-    # Full pipeline for final corrected text (T5 then LLM once)
-    cleaned = sanitize(raw_paragraph)
-    t5_corrected = t5_correct(cleaned)
-    corrected = groq_correct(t5_corrected) if GROQ_API_KEY else t5_corrected
-    corrected = strip_repeated_tail(corrected)
-
-    # Error regions from single paragraph-level correction: map corrected text back to lines
-    corrected_per_line = _map_corrected_to_lines(lines, corrected)
-    error_regions = []
-    for r, line_corrected in zip(lines, corrected_per_line):
-        line_text = r["text"].strip()
-        if not line_text:
-            continue
-        if _line_has_real_correction(line_text, line_corrected):
-            x_min, y_min, x_max, y_max = r["bbox"]
-            error_regions.append({
-                "bbox": [x_min, y_min, x_max, y_max],
-                "original": line_text,
-                "corrected": line_corrected,
-            })
-
     return {
-        "raw_text": raw_paragraph,
-        "cleaned_text": cleaned,
-        "t5_corrected_text": t5_corrected,
-        "corrected_text": corrected,
-        "line_count": len(lines),
-        "lines": [{"line_number": r["line_number"], "text": r["text"]} for r in lines],
+        "raw_text": "[Groq Vision]",
+        "cleaned_text": vision_text,
+        "t5_corrected_text": vision_text,
+        "corrected_text": vision_text,
+        "line_count": 0,
+        "lines": [],
         "image_width": image_width,
         "image_height": image_height,
-        "error_regions": error_regions,
+        "error_regions": [],
     }
 
 

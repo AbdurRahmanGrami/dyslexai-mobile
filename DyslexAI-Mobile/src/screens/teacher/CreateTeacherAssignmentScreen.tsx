@@ -76,10 +76,14 @@ export default function CreateTeacherAssignmentScreen() {
   const [count, setCount] = useState('3');
   const [seedText, setSeedText] = useState('');
 
-  // Custom mode (MVP: one word_typing exercise)
+  // Custom mode
+  const [customList, setCustomList] = useState<Array<{ type: 'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing'; content: string; expected: string; target_words: string[]; difficulty: number }>>([]);
+  const [customType, setCustomType] = useState<'word_typing' | 'sentence_typing' | 'handwriting' | 'tracing'>('word_typing');
   const [customContent, setCustomContent] = useState('');
   const [customExpected, setCustomExpected] = useState('');
   const [customDifficulty, setCustomDifficulty] = useState('1');
+
+  const [dueAt, setDueAt] = useState('');
 
   const [creating, setCreating] = useState(false);
 
@@ -172,20 +176,9 @@ export default function CreateTeacherAssignmentScreen() {
         studentId: assignNow ? studentId : null,
         title: mode === 'generate' ? 'Generated assignment' : 'Custom assignment',
         description: 'Created from teacher mobile UI.',
-        dueAt: null,
+        dueAt: dueAt.trim() ? new Date(dueAt.trim()).toISOString() : null,
         mode,
-        customExercises:
-          mode === 'custom'
-            ? [
-                {
-                  type: 'word_typing',
-                  content: customContent.trim(),
-                  expected: customExpected.trim(),
-                  target_words: [],
-                  difficulty: Number(customDifficulty) || 1,
-                },
-              ]
-            : [],
+        customExercises: mode === 'custom' ? customList : [],
         generate:
           mode === 'generate'
             ? {
@@ -224,6 +217,16 @@ export default function CreateTeacherAssignmentScreen() {
           <Text style={styles.title}>Create Assignment</Text>
           <Text style={styles.sub}>Custom or AI-generated exercises for your students.</Text>
         </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Deadline (Optional)</Text>
+        <TextInput
+          value={dueAt}
+          onChangeText={setDueAt}
+          placeholder="YYYY-MM-DD (e.g. 2026-12-31)"
+          style={styles.input}
+        />
       </View>
 
       <View style={styles.section}>
@@ -398,13 +401,72 @@ export default function CreateTeacherAssignmentScreen() {
         </View>
       ) : (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3) Custom exercise (MVP)</Text>
-          <Text style={styles.miniLabel}>Content (prompt word)</Text>
-          <TextInput value={customContent} onChangeText={setCustomContent} placeholder="e.g. cake" style={styles.input} autoCapitalize="none" />
+          <Text style={styles.sectionTitle}>3) Custom exercises</Text>
+          <Text style={styles.miniLabel}>Exercise type</Text>
+          <View style={styles.grid2}>
+            {(
+              [
+                ['word_typing', 'Word typing'],
+                ['sentence_typing', 'Sentence typing'],
+                ['handwriting', 'Handwriting'],
+                ['tracing', 'Tracing'],
+              ] as Array<[typeof customType, string]>
+            ).map(([value, label]) => {
+              const active = customType === value;
+              return (
+                <TouchableOpacity
+                  key={`cx-${value}`}
+                  style={[styles.pillSmall, active && styles.pillSmallActive]}
+                  onPress={() => setCustomType(value)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.pillSmallText, active && styles.pillSmallTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          
+          <Text style={styles.miniLabel}>Content (prompt/instructions)</Text>
+          <TextInput value={customContent} onChangeText={setCustomContent} placeholder="e.g. Type the word cat" style={styles.input} autoCapitalize="none" />
+          
           <Text style={styles.miniLabel}>Expected answer</Text>
-          <TextInput value={customExpected} onChangeText={setCustomExpected} placeholder="e.g. cake" style={styles.input} autoCapitalize="none" />
+          <TextInput value={customExpected} onChangeText={setCustomExpected} placeholder="e.g. cat" style={styles.input} autoCapitalize="none" />
+          
           <Text style={styles.miniLabel}>Difficulty</Text>
-          <TextInput value={customDifficulty} onChangeText={setCustomDifficulty} placeholder="1" keyboardType="numeric" style={styles.input} />
+          <TextInput value={customDifficulty} onChangeText={setCustomDifficulty} placeholder="1" keyboardType="numeric" style={[styles.input, { marginBottom: spacing.sm }]} />
+          
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => {
+              if (!customExpected.trim()) {
+                Alert.alert('Required', 'Expected answer is required');
+                return;
+              }
+              const words = customExpected.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/g).filter(Boolean);
+              setCustomList([...customList, {
+                type: customType,
+                content: customContent.trim() || customExpected.trim(),
+                expected: customExpected.trim(),
+                target_words: words,
+                difficulty: Number(customDifficulty) || 1
+              }]);
+              setCustomContent('');
+              setCustomExpected('');
+            }}
+          >
+            <Text style={styles.addBtnText}>Add to assignment</Text>
+          </TouchableOpacity>
+
+          {customList.length > 0 && (
+            <View style={{ marginTop: spacing.md }}>
+              <Text style={styles.miniLabel}>Current exercises in this assignment:</Text>
+              {customList.map((c, i) => (
+                <View key={i} style={styles.pill}>
+                  <Text style={styles.pillText}>{i + 1}. {c.type}: {c.expected}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
 

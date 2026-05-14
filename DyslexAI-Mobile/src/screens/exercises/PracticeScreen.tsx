@@ -12,7 +12,8 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { useRoute, type RouteProp } from '@react-navigation/native';
+import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, borderRadius, fonts } from '../../theme';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -34,10 +35,11 @@ import { awardPracticeXP } from '../../utils/gamification';
 import { TracingCanvas, type TracingCanvasRef, type TracingScore } from '../../components/TracingCanvas';
 import { getAssignment, type AssignmentDetail } from '../../api/assignments';
 
-type Phase = 'loading' | 'exercise' | 'submitting' | 'result';
+type Phase = 'loading' | 'exercise' | 'submitting' | 'result' | 'assignment_complete';
 
 export default function PracticeScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Practice'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const exerciseType = route.params?.exerciseType;
   const assignmentId = route.params?.assignmentId;
   const { user } = useAuth();
@@ -275,6 +277,9 @@ export default function PracticeScreen() {
       if (nextIdx < assignment.exercises.length) {
         await loadAssignmentExercise(nextIdx);
         return;
+      } else {
+        setPhase('assignment_complete');
+        return;
       }
     }
     await loadNext(undefined, exercise?.id);
@@ -432,6 +437,21 @@ export default function PracticeScreen() {
           )}
         </View>
       </ScrollView>
+    );
+  }
+
+  if (phase === 'assignment_complete') {
+    return (
+      <View style={styles.centered}>
+        <MaterialIcons name="check-circle" size={64} color={colors.success} />
+        <Text style={[styles.resultTitle, { marginTop: spacing.md }]}>Assignment Complete!</Text>
+        <Text style={{ fontSize: 16, color: colors.textSecondary, marginBottom: spacing.xl, fontFamily: fonts.regular }}>
+          Great job finishing all your exercises.
+        </Text>
+        <TouchableOpacity style={styles.nextButton} onPress={() => navigation.navigate('StudentAssignments')}>
+          <Text style={styles.nextButtonText}>Return to Assignments</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 

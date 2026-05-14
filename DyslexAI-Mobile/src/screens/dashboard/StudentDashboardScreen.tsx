@@ -395,7 +395,7 @@ export default function StudentDashboardScreen() {
               You have {pendingAssignments} pending assignment{pendingAssignments > 1 ? 's' : ''}.
             </Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('LearningExercises')}>
+          <TouchableOpacity onPress={() => navigation.navigate('StudentAssignments')}>
             <Text style={styles.assignmentInboxLink}>Open</Text>
           </TouchableOpacity>
         </View>

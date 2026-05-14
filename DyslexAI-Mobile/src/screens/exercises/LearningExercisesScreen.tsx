@@ -124,33 +124,7 @@ export default function LearningExercisesScreen() {
         <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </TouchableOpacity>
 
-      <View style={styles.section}>
-        <Text style={styles.heading}>Assigned To You</Text>
-        <Text style={styles.subheading}>Assignments from your teacher</Text>
-        {studentAssignments.length === 0 ? (
-          <Text style={styles.muted}>No active assignments right now.</Text>
-        ) : (
-          studentAssignments.slice(0, 5).map((item) => (
-            <TouchableOpacity
-              key={`assignment-${item.id}`}
-              style={styles.assignmentCard}
-              onPress={() => openAssignment(item.id)}
-              activeOpacity={0.8}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.assignmentTitle}>{item.title}</Text>
-                <Text style={styles.assignmentMeta}>
-                  {item.exercise_count} exercises • {item.completed_exercises}/{item.exercise_count} complete
-                </Text>
-                {item.due_at ? (
-                  <Text style={styles.assignmentDue}>Due: {new Date(item.due_at).toLocaleDateString()}</Text>
-                ) : null}
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
+
 
       <View style={styles.section}>
         <Text style={styles.heading}>Your Progress</Text>

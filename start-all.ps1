@@ -116,4 +116,5 @@ Write-Host "  API URLs set to this PC: $apiUrl (scan), $exerciseUrl (exercises)"
 Set-Location $mobilePath
 Write-Host "  Run: npx expo start (in this window)" -ForegroundColor Green
 Write-Host "`nBackends: 8000 (scan), 8001 (exercises). Press 'a' for Android or scan QR with Expo Go.`n" -ForegroundColor Cyan
+$env:NODE_OPTIONS = "--max-old-space-size=4096"
 npx expo start

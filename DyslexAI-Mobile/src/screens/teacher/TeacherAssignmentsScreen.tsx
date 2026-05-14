@@ -60,6 +60,19 @@ export default function TeacherAssignmentsScreen() {
     return { completed, total, pct };
   }, [detail]);
 
+  const overview = useMemo(() => {
+    let completed = 0;
+    assignments.forEach((a) => {
+      const total = a.exercise_count ?? 0;
+      if (total > 0 && (a.completed_exercises ?? 0) >= total) completed++;
+    });
+    return {
+      total: assignments.length,
+      completed,
+      pending: assignments.length - completed,
+    };
+  }, [assignments]);
+
   const onSelect = async (id: number) => {
     setSelectedId(id);
     setDetailLoading(true);
@@ -101,7 +114,23 @@ export default function TeacherAssignmentsScreen() {
 
       {assignments.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your assignments</Text>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={styles.metricsRow}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>{overview.total}</Text>
+              <Text style={styles.metricLabel}>Total</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: colors.success }]}>{overview.completed}</Text>
+              <Text style={styles.metricLabel}>Completed</Text>
+            </View>
+            <View style={styles.metricCard}>
+              <Text style={[styles.metricValue, { color: colors.warning }]}>{overview.pending}</Text>
+              <Text style={styles.metricLabel}>Pending</Text>
+            </View>
+          </View>
+          
+          <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>Your assignments</Text>
           {assignments.map((a) => {
             const isSelected = selectedId === a.id;
             const completedText = `${a.completed_exercises}/${a.exercise_count}`;
@@ -184,6 +213,19 @@ const styles = StyleSheet.create({
 
   section: { marginBottom: spacing.xl },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, fontFamily: fonts.semiBold, marginBottom: spacing.sm },
+
+  metricsRow: { flexDirection: 'row', gap: spacing.sm },
+  metricCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  metricValue: { fontSize: 24, fontWeight: '700', color: colors.primary, fontFamily: fonts.bold, marginBottom: 2 },
+  metricLabel: { fontSize: 12, color: colors.textSecondary, fontFamily: fonts.regular },
 
   card: {
     backgroundColor: colors.surface,
